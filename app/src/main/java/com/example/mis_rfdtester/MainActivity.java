@@ -102,7 +102,6 @@ public class MainActivity extends AppCompatActivity {
 
         if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED)
             ActivityCompat.requestPermissions(MainActivity.this, new String[] { Manifest.permission.ACTIVITY_RECOGNITION }, 0);
-
             Log.d(TAG, "onCreate: Done");
     }
 
@@ -174,14 +173,14 @@ public class MainActivity extends AppCompatActivity {
                 startButton.setEnabled(true);
 
 
-                System.out.println(AccX.size() + " " + AccY.size() + " " + AccZ.size() + " " + RotX.size() + " " + RotY.size() + " " + RotZ.size());
+                System.out.println("Original data size: " + AccX.size() + " " + AccY.size() + " " + AccZ.size() + " " + RotX.size() + " " + RotY.size() + " " + RotZ.size());
                 System.out.println(AccX);
                 System.out.println(RotX);
                 finishListening();
             }
         }.start();
 
-        Log.d(TAG, "StartListening: Function Started");
+        Log.d(TAG, "StartListening: Function Finished");
     }
 
     public String updateTimer(long timeLeft){
@@ -197,8 +196,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void finishListening(){
-        MIS_RFD algo = new MIS_RFD();
+        MIS_RFD algo = new MIS_RFD(MainActivity.this);
         String result = algo.getDetectedAction(AccX, AccY, AccZ, RotX, RotY, RotZ);
         action.setText(result);
     }
+
+
+
 }
