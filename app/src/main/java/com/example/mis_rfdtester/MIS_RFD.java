@@ -19,7 +19,7 @@ import java.util.List;
 
 public class MIS_RFD {
     Module MIS_RFD_model;
-    private final double Acc_threshold = 20.0;
+    private final double Acc_threshold = 15.0; //threshold for model usage
 
     public MIS_RFD(Context context){
         System.out.println("Creating Algorithm class");
@@ -112,21 +112,24 @@ public class MIS_RFD {
 
         try {
             System.out.println("Applying MIS_RFD Algorithm");
-            return model_based_algorithm(AccX, AccY, AccZ, RotX, RotY, RotZ);
+            if(simple_threshold_algorithm(AccX, AccY, AccZ))
+                return model_based_algorithm(AccX, AccY, AccZ, RotX, RotY, RotZ);
+            else
+                return "No fall detected";
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return "error";
+        return "An error has occurred";
     }
 
     //simple algorithm that only detects high accelerations
-    private String simple_threshold_algorithm(List<Float> AccX, List<Float> AccY, List<Float> AccZ){
+    private boolean simple_threshold_algorithm(List<Float> AccX, List<Float> AccY, List<Float> AccZ){
         System.out.println(AccX.size() + " " + AccY.size() + " " + AccZ.size());
         for(int i = 0; i < AccX.size(); ++i){
             if(AccX.get(i)*AccX.get(i) + AccY.get(i)*AccY.get(i) + AccZ.get(i)*AccZ.get(i) > Acc_threshold*Acc_threshold)
-                return "Fall";
+                return true;
         }
-        return "Not Fall";
+        return false;
     }
 
     private String model_based_algorithm(List<Float> AccX, List<Float> AccY, List<Float> AccZ, List<Float> RotX, List<Float> RotY, List<Float> RotZ) throws IOException {
@@ -151,13 +154,9 @@ public class MIS_RFD {
         int prediction = getMaxScoreIdx(scores);
 
         if(prediction == 0)
-            return "Fall";
-        else if(prediction == 1)
-            return "Fall like body motion";
-        else if(prediction == 2)
-            return "Fall like phone motion";
+            return "Fall detected";
         else
-            return "Normal activity";
+            return "No fall detected";
     }
 
     private static String assetFilePath(Context context, String assetName) throws IOException {
