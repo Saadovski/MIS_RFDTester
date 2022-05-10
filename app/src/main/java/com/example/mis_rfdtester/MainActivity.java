@@ -25,6 +25,7 @@ import java.io.Serializable;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.TreeMap;
@@ -33,13 +34,14 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
 
-    private CountDownTimer timer;
-    private Button startButton;
-    private TextView countdown;
-    private TextView action;
+    private int vibration_time = 5000;
+    private final Float threshold = new Float(15.0);
+    private final int numberOfAnalysis = 1;
+    private final int idxFall = 200;
 
-    long preparation_time = 3000;
-    long listening_time = 7000;
+    private Button startButton;
+    private Button stopButton;
+    private TextView action;
 
     private SensorManager sensorManager;
     private List<Float> AccX;
@@ -48,12 +50,19 @@ public class MainActivity extends AppCompatActivity {
     private List<Float> RotX;
     private List<Float> RotY;
     private List<Float> RotZ;
-    private int counter = 0;
 
     private SensorListenerRunnable accel;
     private SensorListenerRunnable gyro;
+    private SensorListenerRunnable handler;
+
+    Thread accThread;
+    Thread rotThread;
+    Thread handlerThread;
 
     private boolean stopListening = false;
+    private boolean peakDetected = false;
+
+    MIS_RFD algo;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,28 +72,16 @@ public class MainActivity extends AppCompatActivity {
         Log.d(TAG, "onCreate: Initializing...");
 
         startButton = findViewById(R.id.button);
-        countdown = findViewById(R.id.Countdown);
+        stopButton = findViewById(R.id.button2);
         action = findViewById(R.id.Action);
 
-        action.setText("None");
-        countdown.setText("07:00");
+        stopButton.setEnabled(false);
+        action.setText("");
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
 
-        accel = new SensorListenerRunnable(Sensor.TYPE_LINEAR_ACCELERATION, sensorManager) {
-            @Override
-            public void run() {
-                while (!stopListening){}
-                return;
-            }
+        algo = new MIS_RFD(MainActivity.this);
 
-            @Override
-            public void onSensorChanged(SensorEvent sensorEvent) {
-                AccX.add(sensorEvent.values[0]);
-                AccY.add(sensorEvent.values[1]);
-                AccZ.add(sensorEvent.values[2]);
-            }
-        };
         gyro = new SensorListenerRunnable(Sensor.TYPE_GYROSCOPE, sensorManager) {
             @Override
             public void run() {
@@ -94,9 +91,60 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onSensorChanged(SensorEvent sensorEvent) {
+                if(RotX.size() >= 350){
+                    RotX.remove(0);
+                    RotY.remove(0);
+                    RotZ.remove(0);
+                }
                 RotX.add(sensorEvent.values[0]);
                 RotY.add(sensorEvent.values[1]);
                 RotZ.add(sensorEvent.values[2]);
+                //System.out.println("RotX" + RotX.size());
+            }
+        };
+        accel = new SensorListenerRunnable(Sensor.TYPE_LINEAR_ACCELERATION, sensorManager) {
+            @Override
+            public void run() {
+                while (!stopListening) {
+                }
+                return;
+            }
+
+            @Override
+            public void onSensorChanged(SensorEvent sensorEvent) {
+                if (AccX.size() >= 350) {
+                    AccX.remove(0);
+                    AccY.remove(0);
+                    AccZ.remove(0);
+                }
+                AccX.add(sensorEvent.values[0]);
+                AccY.add(sensorEvent.values[1]);
+                AccZ.add(sensorEvent.values[2]);
+
+                //System.out.println("AccX" + AccX.size());
+            }
+        };
+        handler = new SensorListenerRunnable(Sensor.TYPE_LINEAR_ACCELERATION, sensorManager) {
+            @Override
+            public void run() {
+                while(!stopListening){}
+                return;
+            }
+
+            @Override
+            public void onSensorChanged(SensorEvent sensorEvent) {
+                if (AccX.size() >= 350 && !peakDetected && square(AccX.get(idxFall)) + square(AccY.get(idxFall)) + square(AccZ.get(idxFall)) >= square(threshold)) {
+                    this.stopListening();
+                    try {
+                        analyseMovement();
+                        Thread.sleep(vibration_time);
+                        this.listen();
+                        peakDetected = false;
+                        action.setText("");
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
         };
 
@@ -109,6 +157,7 @@ public class MainActivity extends AppCompatActivity {
         Log.d(TAG, "StartButtonClicked: Function Started");
 
         startButton.setEnabled(false);
+        stopButton.setEnabled(true);
 
         AccX = new ArrayList<>();
         AccY = new ArrayList<>();
@@ -117,90 +166,60 @@ public class MainActivity extends AppCompatActivity {
         RotY = new ArrayList<>();
         RotZ = new ArrayList<>();
 
-        timer = new CountDownTimer(preparation_time, 10) {
-            @Override
-            public void onTick(long l) {
-                preparation_time = l;
-                startButton.setText(updateTimer(preparation_time));
-            }
-            @Override
-            public void onFinish() {
-                StartListening();
-            }
-        }.start();
-
-        Log.d(TAG, "StartButtonClicked: Function Finished");
-
-    }
-
-    public void StartListening(){
-        Log.d(TAG, "StartListening: Function Started");
-
-        Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            v.vibrate(VibrationEffect.createOneShot(75, VibrationEffect.DEFAULT_AMPLITUDE)); //vibration
-        }
         accel.listen();
         gyro.listen();
-        Thread accThread = new Thread(accel);
-        Thread rotThread = new Thread(gyro);
+        handler.listen();
+
+        accThread = new Thread(accel);
+        rotThread = new Thread(gyro);
+        handlerThread = new Thread(handler);
+
         rotThread.start();
         accThread.start();
+        handlerThread.start();
 
-        timer = new CountDownTimer(listening_time, 10) {
-            @Override
-            public void onTick(long l) {
-                listening_time = l;
-                countdown.setText(updateTimer(listening_time));
-            }
+        Log.d(TAG, "StartButtonClicked: Threads created");
 
-            @Override
-            public void onFinish() {
-                stopListening = true;
-                accel.stopListening();
-                gyro.stopListening();
+        Log.d(TAG, "StartButtonClicked: Function Finished");
+    }
+
+    public void stopButtonClicked(View view){
+        Log.d(TAG, "StopButtonClicked: Function Started");
+        stopListening = true;
+        peakDetected = false;
+
+        action.setText("");
+        accel.stopListening();
+        gyro.stopListening();
+
+        accThread.interrupt();
+        rotThread.interrupt();
+
+        startButton.setEnabled(true);
+        stopButton.setEnabled(false);
+
+        Log.d(TAG, "StopButtonClicked: Function finished");
+    }
+
+    public void analyseMovement() {
+        boolean result = false;
+        if(!peakDetected) {
+            peakDetected = true;
+            result = algo.getDetectedAction(AccX, AccY, AccZ, RotX, RotY, RotZ);
+            if(result){
+                action.setText("FALL DETECTED");
+
+                Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    v.vibrate(VibrationEffect.createOneShot(75, VibrationEffect.DEFAULT_AMPLITUDE));
+                    v.vibrate(VibrationEffect.createOneShot(vibration_time, VibrationEffect.DEFAULT_AMPLITUDE)); //vibration
                 }
-
-                accThread.interrupt();
-                rotThread.interrupt();
-
-                preparation_time = 3000;
-                listening_time = 7000;
-                countdown.setText("07:00");
-                startButton.setText("Start");
-                startButton.setEnabled(true);
-
-
-                System.out.println("Original data size: " + AccX.size() + " " + AccY.size() + " " + AccZ.size() + " " + RotX.size() + " " + RotY.size() + " " + RotZ.size());
-                System.out.println(AccX);
-                System.out.println(RotX);
-                finishListening();
             }
-        }.start();
-
-        Log.d(TAG, "StartListening: Function Finished");
+        }
     }
 
-    public String updateTimer(long timeLeft){
-        int seconds = (int) (timeLeft/1000);
-        int centiseconds = (int) (timeLeft % 1000 / 10);
-
-        String timeLeftText = "0" + seconds;
-        timeLeftText += ":";
-        if (centiseconds<10) timeLeftText += "0";
-        timeLeftText += centiseconds;
-
-        return timeLeftText;
+    public Float square(Float a){
+        return a*a;
     }
-
-    public void finishListening(){
-        MIS_RFD algo = new MIS_RFD(MainActivity.this);
-        String result = algo.getDetectedAction(AccX, AccY, AccZ, RotX, RotY, RotZ);
-        action.setText(result);
-    }
-
 
 
 }

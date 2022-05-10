@@ -86,11 +86,11 @@ public class MIS_RFD {
         return false;
     }
 
-    public String getDetectedAction(List<Float> AccX, List<Float> AccY, List<Float> AccZ, List<Float> RotX, List<Float> RotY, List<Float> RotZ){
+    public boolean getDetectedAction(List<Float> AccX, List<Float> AccY, List<Float> AccZ, List<Float> RotX, List<Float> RotY, List<Float> RotZ){
         System.out.println("Analyzing data");
 
         if(unfit(AccX) || unfit(AccY) ||unfit(AccZ) ||unfit(RotX) ||unfit(RotY) ||unfit(RotZ)){
-            return "Invalid Data";
+            return false;
         }
         System.out.println("Data is fit");
         System.out.println("Cleaning data");
@@ -112,27 +112,16 @@ public class MIS_RFD {
 
         try {
             System.out.println("Applying MIS_RFD Algorithm");
-            if(simple_threshold_algorithm(AccX, AccY, AccZ))
-                return model_based_algorithm(AccX, AccY, AccZ, RotX, RotY, RotZ);
-            else
-                return "No fall detected";
+            boolean result = model_based_algorithm(AccX, AccY, AccZ, RotX, RotY, RotZ);
+            System.out.println("Model result: " + result);
+            return result;
         } catch (IOException e) {
             e.printStackTrace();
-        }
-        return "An error has occurred";
-    }
-
-    //simple algorithm that only detects high accelerations
-    private boolean simple_threshold_algorithm(List<Float> AccX, List<Float> AccY, List<Float> AccZ){
-        System.out.println(AccX.size() + " " + AccY.size() + " " + AccZ.size());
-        for(int i = 0; i < AccX.size(); ++i){
-            if(AccX.get(i)*AccX.get(i) + AccY.get(i)*AccY.get(i) + AccZ.get(i)*AccZ.get(i) > Acc_threshold*Acc_threshold)
-                return true;
         }
         return false;
     }
 
-    private String model_based_algorithm(List<Float> AccX, List<Float> AccY, List<Float> AccZ, List<Float> RotX, List<Float> RotY, List<Float> RotZ) throws IOException {
+    private boolean model_based_algorithm(List<Float> AccX, List<Float> AccY, List<Float> AccZ, List<Float> RotX, List<Float> RotY, List<Float> RotZ) throws IOException {
         System.out.println("Preparing data for model");
 
         float[][] inputArray = new float[][]{ListToArray(AccX), ListToArray(AccY), ListToArray(AccZ), ListToArray(RotX), ListToArray(RotY), ListToArray(RotZ)};
@@ -143,20 +132,20 @@ public class MIS_RFD {
         float[] concat5 = concat(concat4, concat3);
 
         Tensor inputTensor = Tensor.fromBlob(concat5, new long[]{1, 6, 350});
-        System.out.println("Input shape: " + inputTensor.shape());
+        //System.out.println("Input shape: " + inputTensor.shape().toString());
 
         Tensor outputTensor = MIS_RFD_model.forward(IValue.from(inputTensor)).toTensor();
-        System.out.println("Output shape: " + outputTensor.shape());
+        //System.out.println("Output shape: " + outputTensor.shape());
 
         float[] scores = outputTensor.getDataAsFloatArray();
-        System.out.println("Scores obtained: " + scores);
+        //System.out.println("Scores obtained: " + scores);
 
         int prediction = getMaxScoreIdx(scores);
 
         if(prediction == 0)
-            return "Fall detected";
+            return true;
         else
-            return "No fall detected";
+            return false;
     }
 
     private static String assetFilePath(Context context, String assetName) throws IOException {
