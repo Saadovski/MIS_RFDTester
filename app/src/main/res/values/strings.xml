@@ -3,6 +3,13 @@
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="result">Detected Action:</string>
+    <string name="comment">Comment</string>
+    <string name="cancel">Cancel</string>
+    <string name="submit">Submit</string>
+    <string name="Fall_Message">A fall has been detected, please fill out the following information</string>
+    <string name="TP">There was a fall</string>
+    <string name="FP">There was not a fall</string>
+
 
 
 </resources>

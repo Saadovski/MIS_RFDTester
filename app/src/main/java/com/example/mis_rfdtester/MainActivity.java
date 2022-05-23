@@ -14,6 +14,8 @@ import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Log;
@@ -137,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
                     this.stopListening();
                     try {
                         analyseMovement();
-                        Thread.sleep(vibration_time);
+                        Thread.sleep(5000);
                         this.listen();
                         peakDetected = false;
                         action.setText("");
@@ -150,7 +152,8 @@ public class MainActivity extends AppCompatActivity {
 
         if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED)
             ActivityCompat.requestPermissions(MainActivity.this, new String[] { Manifest.permission.ACTIVITY_RECOGNITION }, 0);
-            Log.d(TAG, "onCreate: Done");
+        Log.d(TAG, "onCreate: Done");
+
     }
 
     public void StartButtonClicked(View view){
@@ -185,6 +188,13 @@ public class MainActivity extends AppCompatActivity {
 
     public void stopButtonClicked(View view){
         Log.d(TAG, "StopButtonClicked: Function Started");
+
+        stopListening();
+
+        Log.d(TAG, "StopButtonClicked: Function finished");
+    }
+
+    private void stopListening(){
         stopListening = true;
         peakDetected = false;
 
@@ -197,8 +207,6 @@ public class MainActivity extends AppCompatActivity {
 
         startButton.setEnabled(true);
         stopButton.setEnabled(false);
-
-        Log.d(TAG, "StopButtonClicked: Function finished");
     }
 
     public void analyseMovement() {
@@ -207,14 +215,36 @@ public class MainActivity extends AppCompatActivity {
             peakDetected = true;
             result = algo.getDetectedAction(AccX, AccY, AccZ, RotX, RotY, RotZ);
             if(result){
-                action.setText("FALL DETECTED");
-
                 Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     v.vibrate(VibrationEffect.createOneShot(vibration_time, VibrationEffect.DEFAULT_AMPLITUDE)); //vibration
                 }
+                Handler h = new Handler(Looper.getMainLooper());
+                h.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        stopListening();
+                        handler.stopListening();
+                        handlerThread.interrupt();
+
+                        getUserComment();
+                    }
+                });
             }
         }
+    }
+
+    public void getUserComment(){
+        Intent intent = new Intent(this, CommentActivity.class);
+
+        intent.putExtra("AccX", (Serializable) AccX);
+        intent.putExtra("AccY", (Serializable) AccY);
+        intent.putExtra("AccZ", (Serializable) AccZ);
+        intent.putExtra("RotX", (Serializable) RotX);
+        intent.putExtra("RotY", (Serializable) RotY);
+        intent.putExtra("RotZ", (Serializable) RotZ);
+
+        startActivity(intent);
     }
 
     public Float square(Float a){
